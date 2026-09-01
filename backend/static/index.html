@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IOC Enrichment Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #060B14;
+    --bg-grid: #0C1626;
+    --panel: #0B1524;
+    --panel-2: #08111E;
+    --line: #1A2740;
+    --line-bright: #26385A;
+    --text: #DCE6F5;
+    --text-dim: #64789E;
+    --text-dimmer: #3D4E6E;
+
+    --accent: #33E8C7;        /* signal cyan - live / primary action */
+    --accent-dim: #123B34;
+    --mal: #FF4D6A;           /* critical */
+    --mal-dim: #3A0F1A;
+    --susp: #FFB238;          /* warning */
+    --susp-dim: #3A2A0A;
+    --benign: #2FE08A;        /* clear */
+    --benign-dim: #0E3324;
+    --unk: #6E80A6;           /* neutral */
+
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-sans: 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  ::selection{background:rgba(51,232,199,0.25); color:var(--text);}
+  ::-webkit-scrollbar{width:9px; height:9px;}
+  ::-webkit-scrollbar-track{background:var(--bg);}
+  ::-webkit-scrollbar-thumb{background:var(--line-bright); border-radius:5px;}
+
+  html, body{ height:100%; }
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--font-sans); font-size:14px; line-height:1.5;
+    position:relative;
+  }
+  /* faint graticule / radar-grid texture behind everything */
+  body::before{
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background-image:
+      linear-gradient(var(--bg-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
+    background-size: 42px 42px;
+    opacity:0.35;
+    mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, black 40%, transparent 100%);
+  }
+
+  /* ---------- ops bar ---------- */
+  header.ops-bar{
+    position:relative; z-index:1;
+    display:flex; align-items:center; justify-content:space-between; gap:20px;
+    padding:16px 28px; border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, rgba(11,21,36,0.9), rgba(11,21,36,0.55));
+    backdrop-filter:blur(6px);
+  }
+  .ops-left{display:flex; align-items:center; gap:14px;}
+  .ops-mark{
+    font-family:var(--font-mono); font-weight:700; font-size:13px;
+    color:var(--bg); background:var(--accent); padding:5px 9px; border-radius:4px;
+    letter-spacing:1px; line-height:1;
+  }
+  .ops-title h1{
+    font-family:var(--font-display); font-size:17px; font-weight:600; margin:0; color:var(--text);
+    letter-spacing:0.2px;
+  }
+  .ops-title .ops-sub{color:var(--text-dim); font-size:11.5px; font-family:var(--font-mono);}
+
+  .ops-status{display:flex; align-items:center; gap:18px;}
+  .status-item{
+    display:flex; align-items:center; gap:6px; font-family:var(--font-mono);
+    font-size:11px; color:var(--text-dim); letter-spacing:0.4px;
+  }
+  .status-dot{
+    width:7px; height:7px; border-radius:50%; background:var(--text-dimmer);
+    box-shadow:none; transition:background .2s, box-shadow .2s;
+  }
+  .status-dot.on{background:var(--benign); box-shadow:0 0 8px rgba(47,224,138,0.7);}
+  .status-item.live{color:var(--accent);}
+  .pulse-dot{
+    width:7px; height:7px; border-radius:50%; background:var(--accent);
+    box-shadow:0 0 8px rgba(51,232,199,0.8);
+    animation:pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%,100%{ opacity:1; transform:scale(1); }
+    50%{ opacity:0.45; transform:scale(0.75); }
+  }
+  .status-clock{
+    font-family:var(--font-mono); font-size:12.5px; color:var(--text);
+    background:var(--panel-2); border:1px solid var(--line); border-radius:5px;
+    padding:5px 10px; letter-spacing:0.5px; min-width:98px; text-align:center;
+  }
+
+  button{
+    font-family:var(--font-sans); font-size:13px; font-weight:500; cursor:pointer;
+    border-radius:6px; border:1px solid var(--line); background:var(--panel);
+    color:var(--text); padding:9px 15px; transition:border-color .15s, background .15s, color .15s;
+  }
+  button:hover{border-color:var(--line-bright); color:var(--text);}
+  button.primary{background:var(--accent); color:#032A24; border-color:var(--accent); font-weight:700;}
+  button.primary:hover{background:#5CF0D4;}
+  button.primary:disabled{background:var(--accent-dim); color:#4E7A72; cursor:not-allowed; border-color:var(--accent-dim);}
+  button.ghost{background:transparent;}
+
+  main{position:relative; z-index:1; max-width:1200px; margin:0 auto; padding:28px;}
+
+  .panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    padding:20px 22px; margin-bottom:20px; position:relative; overflow:hidden;
+  }
+  .panel::before{
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background:linear-gradient(90deg, var(--accent), transparent 65%);
+    opacity:0.6;
+  }
+  .panel h2{
+    font-family:var(--font-display); font-size:14px; font-weight:600; margin:0 0 4px 0; color:var(--text);
+  }
+  .panel .hint{color:var(--text-dim); font-size:12.5px; margin:0 0 16px 0; line-height:1.6;}
+  .panel .hint code{color:var(--text); background:var(--panel-2); padding:1px 5px; border-radius:3px; font-family:var(--font-mono);}
+
+  .settings-grid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;}
+  .field label{display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:6px; font-family:var(--font-mono); letter-spacing:0.3px;}
+  .field label .req{color:var(--mal);}
+  .field input[type=text], .field input[type=password]{
+    width:100%; padding:9px 10px; background:var(--panel-2); border:1px solid var(--line);
+    border-radius:6px; color:var(--text); font-family:var(--font-mono); font-size:12.5px;
+  }
+  .field input:focus{outline:none; border-color:var(--accent);}
+  .field .key-row{display:flex; gap:6px;}
+  .field .key-row input{flex:1;}
+  .toggle-vis{padding:9px 10px; font-size:10.5px; font-family:var(--font-mono);}
+  .settings-footer{display:flex; align-items:center; gap:12px; margin-top:16px;}
+  .save-status{font-size:12px; color:var(--accent); opacity:0; transition:opacity .3s; font-family:var(--font-mono);}
+  .save-status.show{opacity:1;}
+
+  .mode-row{display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap;}
+  .mode-btn{
+    padding:10px 16px; border-radius:6px; border:1px solid var(--line); background:var(--panel-2);
+    cursor:pointer; font-size:13px; color:var(--text-dim); font-weight:500; border-left:3px solid var(--line);
+    transition:border-color .15s, color .15s, background .15s;
+  }
+  .mode-btn.active{border-color:var(--line-bright); border-left-color:var(--accent); color:var(--text); background:rgba(51,232,199,0.06);}
+  .mode-btn small{display:block; font-weight:400; font-size:11px; margin-top:2px; color:var(--text-dim); font-family:var(--font-mono);}
+
+  textarea{
+    width:100%; min-height:130px; background:var(--panel-2); border:1px solid var(--line);
+    border-radius:6px; padding:12px; color:var(--text); font-family:var(--font-mono); font-size:12.5px;
+    resize:vertical;
+  }
+  textarea:focus{outline:none; border-color:var(--accent);}
+
+  .run-row{display:flex; align-items:center; gap:16px; margin-top:14px; flex-wrap:wrap;}
+  .opt{display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--text-dim); font-family:var(--font-mono);}
+  .opt input[type=checkbox]{accent-color:var(--accent);}
+  .opt input[type=text]{
+    width:48px; font-family:var(--font-mono); background:var(--panel-2); border:1px solid var(--line);
+    border-radius:4px; color:var(--text); padding:4px 6px;
+  }
+  .spacer{flex:1;}
+
+  .warnings{margin-top:12px; font-size:12px; color:var(--susp); font-family:var(--font-mono);}
+  .warnings div{padding:2px 0;}
+
+  .error-banner{
+    background:var(--mal-dim); border:1px solid var(--mal); color:var(--mal);
+    padding:10px 14px; border-radius:6px; font-size:13px; margin-top:12px; font-family:var(--font-mono);
+  }
+
+  .results-head{display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:18px; flex-wrap:wrap; gap:14px;}
+  .summary-chips{display:flex; gap:10px; flex-wrap:wrap;}
+  .chip{
+    font-family:var(--font-mono); border-radius:6px; border:1px solid var(--line);
+    border-left:3px solid var(--line); background:var(--panel-2);
+    padding:8px 16px 7px 12px; min-width:84px;
+  }
+  .chip .chip-num{display:block; font-size:20px; font-weight:700; line-height:1.1;}
+  .chip .chip-label{display:block; font-size:10px; color:var(--text-dim); letter-spacing:0.4px; margin-top:2px;}
+  .chip.mal{border-left-color:var(--mal);} .chip.mal .chip-num{color:var(--mal);}
+  .chip.susp{border-left-color:var(--susp);} .chip.susp .chip-num{color:var(--susp);}
+  .chip.benign{border-left-color:var(--benign);} .chip.benign .chip-num{color:var(--benign);}
+  .chip.unk{border-left-color:var(--unk);} .chip.unk .chip-num{color:var(--unk);}
+
+  .downloads{display:flex; gap:8px; align-items:center;}
+  .downloads a{
+    font-size:12px; color:var(--text-dim); text-decoration:none; border:1px solid var(--line);
+    padding:7px 11px; border-radius:6px; font-family:var(--font-mono);
+  }
+  .downloads a:hover{color:var(--accent); border-color:var(--accent);}
+  #retryBtn{display:none;}
+  #retryBtn.show{display:inline-block; border-color:var(--susp); color:var(--susp);}
+  #retryBtn.show:hover{background:var(--susp-dim);}
+
+  .err-type{
+    display:inline-block; font-size:9.5px; font-family:var(--font-sans); font-weight:700;
+    padding:1px 6px; border-radius:8px; margin-right:6px; vertical-align:middle;
+    text-transform:uppercase; letter-spacing:.3px;
+  }
+  .err-type.auth{background:var(--mal-dim); color:var(--mal);}
+  .err-type.rate_limit{background:var(--susp-dim); color:var(--susp);}
+  .err-type.network{background:rgba(110,128,166,0.15); color:var(--text-dim);}
+  .err-type.not_found{background:rgba(110,128,166,0.15); color:var(--text-dim);}
+  .err-type.other{background:rgba(110,128,166,0.15); color:var(--text-dim);}
+  .err-msg{color:var(--text-dim); font-size:11px;}
+
+  table{width:100%; border-collapse:collapse; font-size:12.5px;}
+  thead th{
+    text-align:left; padding:9px 10px; color:var(--text-dim); font-weight:600; font-family:var(--font-mono);
+    border-bottom:1px solid var(--line-bright); font-size:10.5px; letter-spacing:0.5px; text-transform:uppercase;
+  }
+  tbody td{padding:10px 10px; border-bottom:1px solid var(--line); font-family:var(--font-mono); vertical-align:top;}
+  tbody tr:hover{background:rgba(51,232,199,0.03);}
+  .ioc-cell{font-weight:600;}
+  .type-tag{font-size:10.5px; color:var(--text-dim); font-family:var(--font-sans); margin-left:6px;}
+  .verdict-badge{
+    display:inline-flex; align-items:center; gap:5px; padding:3px 9px 3px 7px; border-radius:12px;
+    font-size:11px; font-family:var(--font-sans); font-weight:600;
+  }
+  .verdict-badge::before{content:''; width:6px; height:6px; border-radius:50%; flex:none;}
+  .verdict-badge.malicious{background:var(--mal-dim); color:var(--mal);}
+  .verdict-badge.malicious::before{background:var(--mal); animation:pulse 1.6s ease-in-out infinite;}
+  .verdict-badge.suspicious{background:var(--susp-dim); color:var(--susp);}
+  .verdict-badge.suspicious::before{background:var(--susp);}
+  .verdict-badge.benign{background:var(--benign-dim); color:var(--benign);}
+  .verdict-badge.benign::before{background:var(--benign);}
+  .verdict-badge.unknown{background:rgba(110,128,166,0.15); color:var(--unk);}
+  .verdict-badge.unknown::before{background:var(--unk);}
+  .vendors{color:var(--text-dim); font-size:11px; max-width:220px; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .empty-state{text-align:center; color:var(--text-dim); padding:40px 0; font-size:13px; font-family:var(--font-mono);}
+  .loading{text-align:center; color:var(--accent); padding:40px 0; font-size:13px; font-family:var(--font-mono);}
+  .loading::after{content:''; display:inline-block; width:1px;}
+</style>
+</head>
+<body>
+
+<header class="ops-bar">
+  <div class="ops-left">
+    <span class="ops-mark">SOC</span>
+    <div class="ops-title">
+      <h1>IOC Enrichment Console</h1>
+      <span class="ops-sub">threat intel &middot; reputation monitoring</span>
+    </div>
+  </div>
+  <div class="ops-status">
+    <div class="status-item"><span class="status-dot" id="vtStatusDot"></span>VT</div>
+    <div class="status-item"><span class="status-dot" id="abuseStatusDot"></span>ABUSEIPDB</div>
+    <div class="status-item live"><span class="pulse-dot"></span>LIVE</div>
+    <div class="status-clock" id="clock">--:--:-- IST</div>
+    <button class="ghost" id="toggleSettings">Settings</button>
+  </div>
+</header>
+
+<main>
+
+  <section class="panel" id="settingsPanel">
+    <h2>API Keys</h2>
+    <p class="hint">Saved to <code>config.json</code> on this machine and pre-filled here until you change them. Only sent from this browser to your local server, then out to the enrichment APIs.</p>
+    <div class="settings-grid">
+      <div class="field">
+        <label>VirusTotal API key <span class="req">*</span></label>
+        <div class="key-row">
+          <input type="password" id="vtKey" placeholder="Paste key">
+          <button class="toggle-vis" data-target="vtKey">show</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>AbuseIPDB API key <span class="req">*</span></label>
+        <div class="key-row">
+          <input type="password" id="abuseKey" placeholder="Paste key">
+          <button class="toggle-vis" data-target="abuseKey">show</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>ipgeolocation.io key (optional)</label>
+        <div class="key-row">
+          <input type="password" id="geoKey" placeholder="Paste key">
+          <button class="toggle-vis" data-target="geoKey">show</button>
+        </div>
+      </div>
+    </div>
+    <div class="settings-footer">
+      <button class="primary" id="saveKeys">Save keys</button>
+      <span class="save-status" id="saveStatus">Saved</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Run enrichment</h2>
+    <p class="hint">Pick a mode, paste IOCs (one per line), run.</p>
+
+    <div class="mode-row" id="modeRow">
+      <div class="mode-btn active" data-mode="combined">Combined<small>VirusTotal + AbuseIPDB</small></div>
+      <div class="mode-btn" data-mode="vt_only">VirusTotal only<small>IP / domain / hash</small></div>
+      <div class="mode-btn" data-mode="abuseipdb_only">AbuseIPDB only<small>IP only</small></div>
+    </div>
+
+    <textarea id="iocInput" placeholder="8.8.8.8&#10;example.com&#10;44d88612fea8a8f36de82e1278abb02f...">203.55.131.4
+195.96.139.151
+108.165.121.243</textarea>
+
+    <div class="run-row">
+      <label class="opt"><input type="checkbox" id="skipPrivate" checked> Skip private/reserved IPs</label>
+      <label class="opt">Max age (days) <input type="text" id="maxAge" value="90"></label>
+      <label class="opt">Delay/req (s) <input type="text" id="delay" value="1.5"></label>
+      <div class="spacer"></div>
+      <button class="primary" id="runBtn">Run enrichment</button>
+    </div>
+
+    <div id="warnings" class="warnings"></div>
+    <div id="errorBanner" style="display:none" class="error-banner"></div>
+  </section>
+
+  <section class="panel" id="resultsPanel" style="display:none">
+    <div class="results-head">
+      <div class="summary-chips" id="summaryChips"></div>
+      <div class="downloads">
+        <button id="retryBtn">Retry failed only</button>
+        <div id="downloads" style="display:flex; gap:8px;"></div>
+      </div>
+    </div>
+    <div id="resultsBody"></div>
+  </section>
+
+</main>
+
+<script>
+const state = { mode: 'combined', results: [], lastParams: null };
+
+const ERROR_LABELS = {
+  auth: 'key issue',
+  rate_limit: 'rate limited',
+  network: 'network',
+  not_found: 'not found',
+  other: 'error',
+};
+
+const $ = (id) => document.getElementById(id);
+
+function toast(el) {
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1600);
+}
+
+// --- live IST clock ---
+function tickClock() {
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+  const ist = new Date(utcMs + 5.5 * 3600000);
+  const hh = String(ist.getHours()).padStart(2, '0');
+  const mm = String(ist.getMinutes()).padStart(2, '0');
+  const ss = String(ist.getSeconds()).padStart(2, '0');
+  $('clock').textContent = `${hh}:${mm}:${ss} IST`;
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+// --- settings panel toggle ---
+$('toggleSettings').addEventListener('click', () => {
+  const p = $('settingsPanel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+});
+
+// --- show/hide key fields ---
+document.querySelectorAll('.toggle-vis').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const input = document.getElementById(btn.dataset.target);
+    if (input.type === 'password') { input.type = 'text'; btn.textContent = 'hide'; }
+    else { input.type = 'password'; btn.textContent = 'show'; }
+  });
+});
+
+function updateKeyStatusDots(data) {
+  $('vtStatusDot').classList.toggle('on', !!(data.vt_api_key && data.vt_api_key.trim()));
+  $('abuseStatusDot').classList.toggle('on', !!(data.abuseipdb_api_key && data.abuseipdb_api_key.trim()));
+}
+
+// --- load saved keys on page load ---
+async function loadKeys() {
+  const res = await fetch('/api/keys');
+  const data = await res.json();
+  $('vtKey').value = data.vt_api_key || '';
+  $('abuseKey').value = data.abuseipdb_api_key || '';
+  $('geoKey').value = data.ipgeo_api_key || '';
+  updateKeyStatusDots(data);
+}
+loadKeys();
+
+$('saveKeys').addEventListener('click', async () => {
+  const body = {
+    vt_api_key: $('vtKey').value.trim(),
+    abuseipdb_api_key: $('abuseKey').value.trim(),
+    ipgeo_api_key: $('geoKey').value.trim(),
+  };
+  const res = await fetch('/api/keys', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const data = await res.json();
+  updateKeyStatusDots(data.keys || body);
+  toast($('saveStatus'));
+});
+
+// --- mode selector ---
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.mode = btn.dataset.mode;
+  });
+});
+
+// --- run ---
+$('runBtn').addEventListener('click', runAnalysis);
+
+async function runAnalysis() {
+  const iocs = $('iocInput').value;
+  const skipPrivate = $('skipPrivate').checked;
+  const maxAge = parseInt($('maxAge').value || '90', 10);
+  const delay = parseFloat($('delay').value || '1.5');
+  state.lastParams = { skip_private: skipPrivate, max_age_days: maxAge, delay };
+
+  $('errorBanner').style.display = 'none';
+  $('warnings').innerHTML = '';
+  $('resultsPanel').style.display = 'block';
+  $('resultsBody').innerHTML = '<div class="loading">Querying enrichment sources&hellip; this can take a while depending on how many IOCs you pasted.</div>';
+  $('summaryChips').innerHTML = '';
+  $('downloads').innerHTML = '';
+  $('retryBtn').classList.remove('show');
+  $('runBtn').disabled = true;
+
+  try {
+    const res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ mode: state.mode, iocs, skip_private: skipPrivate, max_age_days: maxAge, delay })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      $('resultsPanel').style.display = 'none';
+      $('errorBanner').style.display = 'block';
+      $('errorBanner').textContent = data.error || 'Something went wrong.';
+      if (data.warnings && data.warnings.length) renderWarnings(data.warnings);
+      return;
+    }
+
+    renderWarnings(data.warnings);
+    state.results = data.results || [];
+    renderResults(data.results, data.downloads);
+  } catch (e) {
+    $('resultsPanel').style.display = 'none';
+    $('errorBanner').style.display = 'block';
+    $('errorBanner').textContent = 'Request failed: ' + e.message;
+  } finally {
+    $('runBtn').disabled = false;
+  }
+}
+
+async function retryFailed() {
+  const failed = state.results.filter(r => r.is_retryable);
+  if (!failed.length) return;
+
+  $('retryBtn').disabled = true;
+  $('retryBtn').textContent = 'Retrying\u2026';
+
+  try {
+    const res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        mode: state.mode,
+        iocs: failed.map(r => r.ioc).join('\n'),
+        ...state.lastParams,
+      })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      $('errorBanner').style.display = 'block';
+      $('errorBanner').textContent = data.error || 'Retry failed.';
+      return;
+    }
+
+    // merge: replace entries for retried IOCs, keep the rest untouched
+    const byIoc = new Map(state.results.map(r => [r.ioc, r]));
+    (data.results || []).forEach(r => byIoc.set(r.ioc, r));
+    state.results = Array.from(byIoc.values());
+
+    // regenerate downloadable reports from the merged set
+    const repRes = await fetch('/api/reports', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ mode: state.mode, results: state.results })
+    });
+    const repData = await repRes.json();
+
+    renderWarnings(data.warnings);
+    renderResults(state.results, repData.downloads || {});
+  } catch (e) {
+    $('errorBanner').style.display = 'block';
+    $('errorBanner').textContent = 'Retry request failed: ' + e.message;
+  } finally {
+    $('retryBtn').disabled = false;
+    $('retryBtn').textContent = 'Retry failed only';
+  }
+}
+
+$('retryBtn').addEventListener('click', retryFailed);
+
+function renderWarnings(warnings) {
+  if (!warnings || !warnings.length) return;
+  $('warnings').innerHTML = warnings.map(w => `<div>&#9888; ${escapeHtml(w)}</div>`).join('');
+}
+
+function errCell(errorMsg, errorType) {
+  if (!errorMsg) return null;
+  const badge = errorType ? `<span class="err-type ${errorType}">${ERROR_LABELS[errorType] || errorType}</span>` : '';
+  return `${badge}<span class="err-msg">${escapeHtml(errorMsg)}</span>`;
+}
+
+function renderResults(results, downloads) {
+  results = results || [];
+  const counts = { malicious:0, suspicious:0, benign:0, unknown:0 };
+  results.forEach(r => counts[r.verdict]++);
+  const retryableCount = results.filter(r => r.is_retryable).length;
+
+  $('summaryChips').innerHTML = `
+    <div class="chip mal"><span class="chip-num">${counts.malicious}</span><span class="chip-label">MALICIOUS</span></div>
+    <div class="chip susp"><span class="chip-num">${counts.suspicious}</span><span class="chip-label">SUSPICIOUS</span></div>
+    <div class="chip benign"><span class="chip-num">${counts.benign}</span><span class="chip-label">BENIGN</span></div>
+    <div class="chip unk"><span class="chip-num">${counts.unknown}</span><span class="chip-label">UNKNOWN</span></div>
+  `;
+
+  const dl = downloads || {};
+  $('downloads').innerHTML = `
+    <a href="/api/download/${dl.csv}" download>CSV</a>
+    <a href="/api/download/${dl.txt}" download>Text</a>
+    <a href="/api/download/${dl.stix}" download>STIX 2.1</a>
+  `;
+
+  const retryBtn = $('retryBtn');
+  if (retryableCount > 0) {
+    retryBtn.classList.add('show');
+    retryBtn.textContent = `Retry failed only (${retryableCount})`;
+  } else {
+    retryBtn.classList.remove('show');
+  }
+
+  if (!results.length) {
+    $('resultsBody').innerHTML = '<div class="empty-state">No results.</div>';
+    return;
+  }
+
+  const order = {malicious:0, suspicious:1, unknown:2, benign:3};
+  results = [...results].sort((a,b) => order[a.verdict]-order[b.verdict]);
+
+  let rows = results.map(r => {
+    const vtCell = errCell(r.vt_error, r.vt_error_type)
+      || (r.vt_malicious != null ? `${r.vt_malicious}m / ${r.vt_suspicious}s / ${r.vt_harmless}h` : '&mdash;');
+    const abuseCell = errCell(r.abuse_error, r.abuse_error_type)
+      || (r.abuse_confidence_score != null ? `${r.abuse_confidence_score}/100 (${r.abuse_total_reports} rpts)` : '&mdash;');
+    return `
+    <tr>
+      <td><span class="ioc-cell">${escapeHtml(r.ioc)}</span><span class="type-tag">${r.ioc_type}</span></td>
+      <td><span class="verdict-badge ${r.verdict}">${r.verdict}</span></td>
+      <td>${r.confidence}</td>
+      <td>${vtCell}</td>
+      <td>${abuseCell}</td>
+      <td>${escapeHtml(r.location || 'N/A')}</td>
+      <td><span class="vendors" title="${escapeHtml((r.vt_flagging_vendors||[]).join(', '))}">${(r.vt_flagging_vendors||[]).slice(0,3).join(', ') || '&mdash;'}</span></td>
+    </tr>
+  `;
+  }).join('');
+
+  $('resultsBody').innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>IOC</th><th>Verdict</th><th>Confidence</th><th>VirusTotal</th><th>AbuseIPDB</th><th>Location</th><th>Flagged by</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+</script>
+
+</body>
+</html>

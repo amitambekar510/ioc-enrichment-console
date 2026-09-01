@@ -1,0 +1,44 @@
+{
+  "type": "bundle",
+  "id": "bundle--0d85fed4-736f-4b75-b84a-774c313084da",
+  "objects": [
+    {
+      "type": "indicator",
+      "spec_version": "2.1",
+      "id": "indicator--7cef5671-7a59-42c1-9418-8a28e527632d",
+      "created": "2026-09-02T00:02:33.584+05:30",
+      "modified": "2026-09-02T00:02:33.584+05:30",
+      "name": "Unknown IP: 8.8.8.8",
+      "description": "Automated enrichment for IP 8.8.8.8. VirusTotal: VirusTotal request failed - network/connection error after retries AbuseIPDB: AbuseIPDB request failed - network/connection error after retries",
+      "indicator_types": [
+        "unknown"
+      ],
+      "pattern": "[ipv4-addr:value = '8.8.8.8']",
+      "pattern_type": "stix",
+      "pattern_version": "2.1",
+      "valid_from": "2026-09-02T00:02:33.584+05:30",
+      "confidence": 0,
+      "labels": [
+        "unknown",
+        "ip"
+      ],
+      "external_references": [
+        {
+          "source_name": "VirusTotal",
+          "url": "https://www.virustotal.com/gui/ip-address/8.8.8.8"
+        }
+      ],
+      "x_ioc_type": "ip",
+      "x_virustotal_malicious": null,
+      "x_virustotal_suspicious": null,
+      "x_virustotal_community_score": null,
+      "x_virustotal_flagging_vendors": [],
+      "x_virustotal_asn": null,
+      "x_abuseipdb_confidence_score": null,
+      "x_abuseipdb_total_reports": null,
+      "x_abuseipdb_is_tor": null,
+      "x_geolocation_city": null,
+      "x_geolocation_country": null
+    }
+  ]
+}

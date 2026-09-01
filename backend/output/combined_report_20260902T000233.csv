@@ -1,0 +1,2 @@
+ioc,ioc_type,verdict,confidence,location,vt_asn,vt_malicious,vt_suspicious,vt_harmless,vt_reputation,community_score,vt_last_analysis_date,vt_error,vt_error_type,abuse_confidence_score,abuse_total_reports,abuse_country,abuse_isp,abuse_usage_type,abuse_is_tor,abuse_last_reported,abuse_error_type,geo_error,geo_lat,geo_lon
+8.8.8.8,ip,unknown,0,N/A,,,,,,,,VirusTotal request failed - network/connection error after retries,network,,,,,,,,network,ip-api.com rejected the API key (HTTP 403) - check Settings,,
